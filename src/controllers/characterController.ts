@@ -54,6 +54,7 @@ export const getCharacters = async (request: FastifyRequest, reply: FastifyReply
   } else if (userId && !username) {
     Object.assign(filter, { user: userId });
   } else if (userId && username) {
+    request.log.info('Specify either userId or username, not both');
     return reply.status(500).send({
       message: 'Specify either userId or username, not both'
     });
