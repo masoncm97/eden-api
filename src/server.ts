@@ -1,7 +1,6 @@
 import fastify, { FastifyReply, FastifyRequest } from 'fastify';
-import cors from '@fastify/cors'
+import cors from '@fastify/cors';
 import fastifyJWT from '@fastify/jwt';
-
 import config from './plugins/config';
 import registerMongo from './plugins/mongoPlugin';
 import registerMinio from './plugins/minioPlugin';
@@ -12,32 +11,42 @@ import registerLlm from './plugins/llmPlugin';
 import registerTts from './plugins/ttsPlugin';
 import { routes } from './routes';
 import { taskHandlers } from './lib/taskHandlers/taskHandler';
+import * as Sentry from '@sentry/node';
 
 export interface CreateServerOpts {
   mongoUri?: string;
-  taskHandlers?: TaskHandlers
+  taskHandlers?: TaskHandlers;
 }
 
-// test 1
-
-const createServer = async (opts: CreateServerOpts = {
-  taskHandlers: taskHandlers
-}) => {
+const createServer = async (
+  opts: CreateServerOpts = {
+    taskHandlers: taskHandlers,
+  },
+) => {
   const server = fastify({
     ajv: {
       customOptions: {
-        removeAdditional: "all",
+        removeAdditional: 'all',
         coerceTypes: true,
         useDefaults: true,
-      }
+      },
     },
     logger: {
       level: process.env.LOG_LEVEL,
     },
   });
 
+  server.setErrorHandler(async (error, request, reply) => {
+    server.log.error('Helloooo!!!');
+    // Sending error to be logged in Sentry
+    Sentry.captureException(error);
+    if (!reply.sent) {
+      reply.status(500).send({ error: 'Something went wrong' });
+    }
+  });
+
   await server.register(config);
- 
+
   await registerMongo(server, opts.mongoUri);
   await registerMultipart(server);
   await registerTaskHandlers(server, opts.taskHandlers);
@@ -46,16 +55,16 @@ const createServer = async (opts: CreateServerOpts = {
     origin: 'https://exotopia.xyz',
     methods: 'GET,POST',
   });
- 
+
   await server.register(fastifyJWT, {
-    secret: server.config.JWT_SECRET
+    secret: server.config.JWT_SECRET,
   });
 
-  await server.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
+  await server.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       await request.jwtVerify();
     } catch (err) {
-      reply.send(err)
+      reply.send(err);
     }
   });
 
@@ -78,13 +87,13 @@ const createServer = async (opts: CreateServerOpts = {
   await server.register(import('@fastify/rate-limit'), {
     max: 10000,
     timeWindow: '1 minute',
-  })
+  });
 
-  routes.map(async route => {
+  routes.map(async (route) => {
     await server.register(route);
   });
   await server.ready();
   return server;
-}
+};
 
 export default createServer;
